@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node src/index.js",
+    "start:web": "node src/server.js",
     "generate-data": "node scripts/generate-sample-data.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

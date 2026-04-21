@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Supervisor Report Sample</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: #121936;
+        --panel-2: #0f1530;
+        --line: #2a3663;
+        --text: #e8eefc;
+        --muted: #9aabd3;
+        --accent: #5eead4;
+        --accent-2: #60a5fa;
+        --warn: #f59e0b;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, Arial, sans-serif;
+        background: linear-gradient(180deg, #08101f, var(--bg));
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 28px;
+      }
+      .hero, .panel {
+        background: linear-gradient(180deg, rgba(18,25,54,.95), rgba(15,21,48,.95));
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: 0 12px 40px rgba(0,0,0,.25);
+      }
+      .hero { padding: 24px; margin-bottom: 18px; }
+      .panel { padding: 18px; }
+      .hero-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        gap: 16px;
+      }
+      .badge {
+        padding: 8px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        color: #08101f;
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      }
+      h1, h2, h3, p { margin-top: 0; }
+      .muted { color: var(--muted); }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 14px;
+        margin: 18px 0;
+      }
+      .stat {
+        padding: 16px;
+        border-radius: 14px;
+        background: rgba(8,16,31,.45);
+        border: 1px solid var(--line);
+      }
+      .stat .label { color: var(--muted); font-size: 12px; }
+      .stat .value { font-size: 24px; font-weight: 800; margin-top: 8px; }
+      .layout {
+        display: grid;
+        grid-template-columns: 1.4fr .9fr;
+        gap: 18px;
+      }
+      .section { margin-bottom: 18px; }
+      .timeline {
+        display: grid;
+        gap: 12px;
+      }
+      .step {
+        border-left: 3px solid var(--accent-2);
+        padding: 10px 0 10px 14px;
+      }
+      .step b { display: block; margin-bottom: 4px; }
+      .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+      .chip {
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: #0a1733;
+        border: 1px solid var(--line);
+        font-size: 12px;
+        color: #c9dafb;
+      }
+      .answer {
+        white-space: pre-wrap;
+        line-height: 1.6;
+        background: rgba(8,16,31,.45);
+        border: 1px solid var(--line);
+        padding: 16px;
+        border-radius: 14px;
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: 120px 1fr;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .kv .k { color: var(--muted); }
+      .footer-note {
+        margin-top: 18px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      @media (max-width: 900px) {
+        .grid, .layout { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="hero">
+        <div class="hero-top">
+          <div>
+            <h1>Supervisor HTML Report</h1>
+            <p class="muted">Bản report mẫu cho flow Supervisor SRS MVP đã tích hợp vào project hiện tại.</p>
+          </div>
+          <div class="badge">COMPLETED</div>
+        </div>
+
+        <div class="grid">
+          <div class="stat"><div class="label">Request ID</div><div class="value">req_001</div></div>
+          <div class="stat"><div class="label">Intent</div><div class="value">policy</div></div>
+          <div class="stat"><div class="label">Risk</div><div class="value">medium</div></div>
+          <div class="stat"><div class="label">Confidence</div><div class="value">0.82</div></div>
+        </div>
+      </div>
+
+      <div class="layout">
+        <div>
+          <div class="panel section">
+            <h2>Executive Summary</h2>
+            <div class="answer">Yêu cầu được nhận từ Microsoft Teams và được phân loại là policy/support-oriented request. Hệ thống đã chọn flow subagents thay vì trả lời trực tiếp do đây là yêu cầu cần kiểm tra guideline và tạo phản hồi an toàn.
+
+Kết quả cuối cùng là một draft trả lời có kiểm soát, confidence ở mức 0.82, risk mức medium và không bắt buộc human review trong ví dụ này.</div>
+          </div>
+
+          <div class="panel section">
+            <h2>Generated Answer</h2>
+            <div class="answer">Request from Tester: Please analyze this support case and prepare a safe response based on policy
+Policy notes: Follow internal policy and avoid unsupported commitments.
+Proposed response: We reviewed the request, used the available context, and prepared the safest next response for this conversation.</div>
+          </div>
+
+          <div class="panel section">
+            <h2>Decision Timeline</h2>
+            <div class="timeline">
+              <div class="step"><b>1. Normalize input</b><span class="muted">Chuẩn hóa payload từ Teams / n8n sang schema nội bộ.</span></div>
+              <div class="step"><b>2. Retrieve memory</b><span class="muted">Lấy conversation memory, user memory, case memory và semantic knowledge.</span></div>
+              <div class="step"><b>3. Classify intent</b><span class="muted">Intent được xác định là <b>policy</b>.</span></div>
+              <div class="step"><b>4. Evaluate risk</b><span class="muted">Risk được chấm ở mức <b>medium</b>.</span></div>
+              <div class="step"><b>5. Orchestrate subagents</b><span class="muted">Dùng context, policy, knowledge, draft và QA agents.</span></div>
+              <div class="step"><b>6. Aggregate result</b><span class="muted">Sinh output theo SRS schema cho webhook/output layer.</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="panel section">
+            <h3>Request Snapshot</h3>
+            <div class="kv"><div class="k">User</div><div>Tester</div></div>
+            <div class="kv"><div class="k">Thread</div><div>t1</div></div>
+            <div class="kv"><div class="k">Case</div><div>c1</div></div>
+            <div class="kv"><div class="k">Priority</div><div>medium</div></div>
+          </div>
+
+          <div class="panel section">
+            <h3>Agents Used</h3>
+            <div class="chips">
+              <div class="chip">context_agent</div>
+              <div class="chip">policy_agent</div>
+              <div class="chip">knowledge_agent</div>
+              <div class="chip">draft_agent</div>
+              <div class="chip">qa_agent</div>
+            </div>
+          </div>
+
+          <div class="panel section">
+            <h3>Audit Metadata</h3>
+            <div class="kv"><div class="k">Status</div><div>completed</div></div>
+            <div class="kv"><div class="k">Processing</div><div>13 ms</div></div>
+            <div class="kv"><div class="k">Output</div><div>SRS-aligned JSON response</div></div>
+          </div>
+
+          <div class="panel section">
+            <h3>Sample Output JSON</h3>
+            <div class="answer">{
+  "request_id": "req_001",
+  "status": "completed",
+  "confidence": 0.82,
+  "risk_level": "medium",
+  "metadata": {
+    "intent": "policy",
+    "agents_used": ["context_agent", "policy_agent", "knowledge_agent", "draft_agent", "qa_agent"],
+    "processing_time_ms": 13
+  }
+}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-note">Mở file này qua web server tại <b>http://localhost:3000/supervisor-report.html</b></div>
+    </div>
+  </body>
+  </html>
