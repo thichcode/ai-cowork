@@ -13,6 +13,7 @@ const { aggregateResult } = require('./supervisor/aggregator');
 const { generateProposals, selectBestProposal } = require('./supervisor/proposalGenerator');
 const { createApprovalRequest, getApprovalRequest, approveProposal, isAwaitingApproval } = require('./supervisor/approvalHandler');
 const { evaluateResult, MAX_ITERATIONS } = require('./supervisor/goalTracker');
+const { validateRequest, checkImprovementFeasibility } = require('./supervisor/dataSufficiency');
 
 async function orchestrate(request, ctx = {}) {
   const state = createJobState(request, ctx.modelConfig || {});
@@ -73,6 +74,23 @@ async function orchestrate(request, ctx = {}) {
 
   const execCtx = { ...ctx, dataDir };
 
+  const validation = await validateRequest(request, dataDir);
+  if (validation.status !== 'SUFFICIENT') {
+    state.job.status = validation.status;
+    state.job.completedAt = new Date().toISOString();
+    state.sufficiency = validation;
+    pushMessage(state, { jobId: state.job.id, from: 'gateway', to: 'dispatcher', type: validation.status, payload: validation });
+    emit({ type: validation.status, jobId: state.job.id, validation, timestamp: new Date().toISOString() });
+    return {
+      job: state.job,
+      plans: state.plans,
+      tasks: state.tasks,
+      messages: state.messages,
+      sufficiency: validation,
+      status: validation.status,
+    };
+  }
+
   const disableAutoIteration = ctx.disableAutoIteration === true;
   let currentPlan = plan;
 
@@ -90,6 +108,14 @@ async function orchestrate(request, ctx = {}) {
       break;
     }
 
+    const feasibility = checkImprovementFeasibility(state.job.goalHistory);
+    if (!feasibility.feasible) {
+      state.job.status = 'INSUFFICIENT_DATA';
+      state.job.sufficiencyReason = feasibility.reason;
+      emit({ type: 'insufficient_data', jobId: state.job.id, feasibility, timestamp: new Date().toISOString() });
+      break;
+    }
+
     if (state.job.iterationCount >= MAX_ITERATIONS) {
       state.job.status = 'MAX_ITERATIONS_EXCEEDED';
       break;
@@ -103,7 +129,7 @@ async function orchestrate(request, ctx = {}) {
     emit({ type: 'plan_revised', jobId: state.job.id, planId: currentPlan.id, iteration: state.job.iterationCount, evaluation, timestamp: new Date().toISOString() });
   } while (true);
 
-  if (state.job.status !== 'MAX_ITERATIONS_EXCEEDED') {
+  if (state.job.status !== 'MAX_ITERATIONS_EXCEEDED' && state.job.status !== 'INSUFFICIENT_DATA') {
     state.job.status = 'COMPLETED';
   }
   state.job.completedAt = new Date().toISOString();
