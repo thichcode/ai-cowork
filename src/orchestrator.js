@@ -14,11 +14,15 @@ const { generateProposals, selectBestProposal } = require('./supervisor/proposal
 const { createApprovalRequest, getApprovalRequest, approveProposal, isAwaitingApproval } = require('./supervisor/approvalHandler');
 const { evaluateResult, MAX_ITERATIONS } = require('./supervisor/goalTracker');
 const { validateRequest, checkImprovementFeasibility } = require('./supervisor/dataSufficiency');
+const { generate } = require('./llm');
+const { saveJob, saveEvent } = require('./runtime/jobStore');
 
 async function orchestrate(request, ctx = {}) {
   const state = createJobState(request, ctx.modelConfig || {});
   const dataDir = ctx.dataDir || path.resolve(__dirname, '../data');
   const emit = typeof ctx.onEvent === 'function' ? ctx.onEvent : () => {};
+
+  try { require('fs').mkdirSync(dataDir, { recursive: true }); } catch {};
 
   state.job.status = 'PLANNING';
   state.job.startedAt = new Date().toISOString();
@@ -32,6 +36,7 @@ async function orchestrate(request, ctx = {}) {
   state.job.currentPlanId = plan.id;
   pushMessage(state, { jobId: state.job.id, from: 'planner-agent', to: 'dispatcher', type: 'plan_created', payload: plan });
   emit({ type: 'plan_created', jobId: state.job.id, planId: plan.id, tasks: plan.tasks, modelConfig: state.job.modelConfig, skills: state.skills, knowledge: state.knowledge, timestamp: new Date().toISOString() });
+  await saveJob(state).catch(e => console.error('[Persist] save error:', e.message));
 
   const proposals = generateProposals(request, plan, state.skills, state.knowledge);
   state.proposals = proposals;
@@ -50,6 +55,8 @@ async function orchestrate(request, ctx = {}) {
     
     pushMessage(state, { jobId: state.job.id, from: 'planner-agent', to: 'approval-handler', type: 'approval_requested', payload: approvalReq });
     emit({ type: 'approval_requested', jobId: state.job.id, approvalId: approvalReq.id, proposals, timestamp: new Date().toISOString() });
+    await saveJob(state).catch(e => console.error('[Persist] save error:', e.message));
+    await saveEvent(state.job.id, 'awaiting_approval', { approvalId: approvalReq.id }).catch(() => {});
     
     return {
       job: state.job,
@@ -72,7 +79,7 @@ async function orchestrate(request, ctx = {}) {
     'report-agent': reportAgent,
   };
 
-  const execCtx = { ...ctx, dataDir };
+  const execCtx = { ...ctx, dataDir, llm: generate };
 
   const validation = await validateRequest(request, dataDir);
   if (validation.status !== 'SUFFICIENT') {
@@ -96,6 +103,8 @@ async function orchestrate(request, ctx = {}) {
 
   do {
     await runDispatcher(state, currentPlan, agentRegistry, execCtx);
+    await saveJob(state).catch(e => console.error('[Persist] save error:', e.message));
+    await saveEvent(state.job.id, 'iteration_complete', { iteration: state.job.iterationCount }).catch(() => {});
 
     if (disableAutoIteration) break;
 
@@ -133,6 +142,8 @@ async function orchestrate(request, ctx = {}) {
     state.job.status = 'COMPLETED';
   }
   state.job.completedAt = new Date().toISOString();
+  await saveJob(state).catch(e => console.error('[Persist] final save error:', e.message));
+  await saveEvent(state.job.id, 'job_complete', { status: state.job.status }).catch(() => {});
   emit({ type: 'job_completed', jobId: state.job.id, timestamp: state.job.completedAt, results: state.results, state, goalHistory: state.job.goalHistory });
 
   return {
@@ -186,10 +197,13 @@ async function resumeExecution(jobId, proposalId, ctx = {}) {
     'report-agent': reportAgent,
   };
 
-  await runDispatcher(state, plan, agentRegistry, { ...ctx, dataDir });
+  await runDispatcher(state, plan, agentRegistry, { ...ctx, dataDir, llm: generate });
+  await saveJob(state).catch(e => console.error('[Persist] save error:', e.message));
 
   state.job.status = 'COMPLETED';
   state.job.completedAt = new Date().toISOString();
+  await saveJob(state).catch(e => console.error('[Persist] final save error:', e.message));
+  await saveEvent(state.job.id, 'job_complete', { status: state.job.status }).catch(() => {});
   emit({ type: 'job_completed', jobId: state.job.id, timestamp: state.job.completedAt, results: state.results, state });
 
   return {
