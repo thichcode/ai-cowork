@@ -21,7 +21,7 @@ function buildPlan(request) {
   }
 
   return {
-    id: `plan_${Date.now()}`,
+    id: `plan_${Date.now()}_v1`,
     version: 1,
     tasks,
     selectedSkills,
@@ -29,6 +29,83 @@ function buildPlan(request) {
   };
 }
 
+function revisePlan(request, state, evaluation) {
+  const normalized = request.toLowerCase();
+  const newTasks = [];
+  const prefix = `iter_${(state.job.iterationCount || 0) + 1}`;
+
+  if (evaluation.gaps.includes('coverage')) {
+    const dataTasks = state.tasks.filter((t) => t.assignedAgent === 'data-agent');
+    const sourcesRead = new Set(dataTasks.filter((t) => t.status === 'COMPLETED').map((t) => t.source));
+    const missingSources = [];
+
+    if (!sourcesRead.has('csv') && (!normalized.includes('backup') || !normalized.includes('report'))) {
+      missingSources.push('csv');
+    }
+    if (!sourcesRead.has('db')) missingSources.push('db');
+    if (!sourcesRead.has('excel')) missingSources.push('excel');
+
+    if (missingSources.length === 0) {
+      const allDataTasks = ['csv', 'db', 'excel'].filter((s) => !sourcesRead.has(s));
+      if (allDataTasks.length > 0) {
+        missingSources.push(allDataTasks[0]);
+      } else {
+        newTasks.push({
+          id: `${prefix}_data_refresh`,
+          assignedAgent: 'data-agent',
+          goal: 'Re-read all data sources for updated state',
+          source: 'all',
+        });
+      }
+    }
+
+    missingSources.forEach((src) => {
+      newTasks.push({
+        id: `${prefix}_data_${src}`,
+        assignedAgent: 'data-agent',
+        goal: `Read ${src} data (improving coverage)`,
+        source: src,
+      });
+    });
+  }
+
+  if (evaluation.gaps.includes('depth')) {
+    newTasks.push({
+      id: `${prefix}_rca_deep`,
+      assignedAgent: 'rca-agent',
+      goal: 'Deeper RCA analysis with root cause identification',
+      source: 'rca',
+    });
+  }
+
+  if (evaluation.gaps.includes('relevance')) {
+    newTasks.push({
+      id: `${prefix}_report_refine`,
+      assignedAgent: 'report-agent',
+      goal: `Refine report to address: ${request}`,
+      source: 'report',
+    });
+  }
+
+  if (newTasks.length === 0) {
+    newTasks.push({
+      id: `${prefix}_report_supplement`,
+      assignedAgent: 'report-agent',
+      goal: `Supplement report for: ${request}`,
+      source: 'report',
+    });
+  }
+
+  return {
+    id: `plan_${Date.now()}_v${(state.job.iterationCount || 0) + 2}`,
+    version: (state.job.iterationCount || 0) + 2,
+    tasks: newTasks,
+    selectedSkills: state.skills || [],
+    retrievedKnowledge: state.knowledge || [],
+  };
+}
+
 module.exports = {
   buildPlan,
+  revisePlan,
 };

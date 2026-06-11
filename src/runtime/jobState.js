@@ -12,6 +12,8 @@ function createJobState(request, modelConfig = {}) {
       currentPlanId: null,
       approvalStatus: null,
       approvedProposalId: null,
+      iterationCount: 0,
+      goalHistory: [],
     },
     plans: [],
     knowledge: [],

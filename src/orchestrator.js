@@ -1,6 +1,6 @@
 const path = require('path');
 const { createJobState, pushMessage } = require('./runtime/jobState');
-const { buildPlan } = require('./agents/plannerAgent');
+const { buildPlan, revisePlan } = require('./agents/plannerAgent');
 const { runDispatcher } = require('./agents/dispatcher');
 const { dataAgent, rcaAgent, reportAgent } = require('./agents/specialistAgents');
 const { normalizeInput } = require('./supervisor/normalizer');
@@ -12,9 +12,11 @@ const { contextAgent, policyAgent, knowledgeAgent, draftAgent, qaAgent } = requi
 const { aggregateResult } = require('./supervisor/aggregator');
 const { generateProposals, selectBestProposal } = require('./supervisor/proposalGenerator');
 const { createApprovalRequest, getApprovalRequest, approveProposal, isAwaitingApproval } = require('./supervisor/approvalHandler');
+const { evaluateResult, MAX_ITERATIONS } = require('./supervisor/goalTracker');
 
 async function orchestrate(request, ctx = {}) {
   const state = createJobState(request, ctx.modelConfig || {});
+  const dataDir = ctx.dataDir || path.resolve(__dirname, '../data');
   const emit = typeof ctx.onEvent === 'function' ? ctx.onEvent : () => {};
 
   state.job.status = 'PLANNING';
@@ -69,11 +71,43 @@ async function orchestrate(request, ctx = {}) {
     'report-agent': reportAgent,
   };
 
-  await runDispatcher(state, plan, agentRegistry, ctx);
+  const execCtx = { ...ctx, dataDir };
 
-  state.job.status = 'COMPLETED';
+  const disableAutoIteration = ctx.disableAutoIteration === true;
+  let currentPlan = plan;
+
+  do {
+    await runDispatcher(state, currentPlan, agentRegistry, execCtx);
+
+    if (disableAutoIteration) break;
+
+    const evaluation = evaluateResult(state, request, state.job.iterationCount);
+    state.job.iterationCount++;
+
+    emit({ type: 'iteration_completed', jobId: state.job.id, iteration: state.job.iterationCount, evaluation, timestamp: new Date().toISOString() });
+
+    if (evaluation.isMet) {
+      break;
+    }
+
+    if (state.job.iterationCount >= MAX_ITERATIONS) {
+      state.job.status = 'MAX_ITERATIONS_EXCEEDED';
+      break;
+    }
+
+    currentPlan = revisePlan(request, state, evaluation);
+    state.plans.push(currentPlan);
+    state.job.currentPlanId = currentPlan.id;
+
+    pushMessage(state, { jobId: state.job.id, from: 'planner-agent', to: 'dispatcher', type: 'plan_revised', payload: { plan: currentPlan, evaluation } });
+    emit({ type: 'plan_revised', jobId: state.job.id, planId: currentPlan.id, iteration: state.job.iterationCount, evaluation, timestamp: new Date().toISOString() });
+  } while (true);
+
+  if (state.job.status !== 'MAX_ITERATIONS_EXCEEDED') {
+    state.job.status = 'COMPLETED';
+  }
   state.job.completedAt = new Date().toISOString();
-  emit({ type: 'job_completed', jobId: state.job.id, timestamp: state.job.completedAt, results: state.results, state });
+  emit({ type: 'job_completed', jobId: state.job.id, timestamp: state.job.completedAt, results: state.results, state, goalHistory: state.job.goalHistory });
 
   return {
     job: state.job,
@@ -83,6 +117,7 @@ async function orchestrate(request, ctx = {}) {
     tasks: state.tasks,
     messages: state.messages,
     results: state.results,
+    goalHistory: state.job.goalHistory,
   };
 }
 
